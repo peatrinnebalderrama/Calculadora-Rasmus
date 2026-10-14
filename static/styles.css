@@ -1,0 +1,135 @@
+:root{
+  --rasmus-dark:#1b1f27;
+  --rasmus-accent:#ff6b1a;
+  --rasmus-accent-dark:#e65a0d;
+  --rasmus-bg:#f4f5f8;
+  --rasmus-muted:#6b7280;
+}
+body{
+  font-family:'Plus Jakarta Sans',sans-serif;
+  background:var(--rasmus-bg);
+  color:#222;
+}
+
+/* Barra lateral */
+.sidebar{
+  position:fixed;top:0;left:0;bottom:0;width:260px;z-index:1040;
+  background:var(--rasmus-dark);display:flex;flex-direction:column;
+  overflow-y:auto;transition:transform .25s ease;
+}
+.sidebar-brand{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:1.4rem 1.4rem 1rem;color:#fff;font-weight:800;font-size:1.25rem;
+  letter-spacing:.5px;text-decoration:none;
+}
+.sidebar-brand i{color:var(--rasmus-accent);margin-right:.4rem}
+.sidebar-grupo{
+  padding:1.2rem 1.4rem .4rem;font-size:.7rem;text-transform:uppercase;
+  letter-spacing:1.2px;color:#6f7787;font-weight:700;
+}
+.sidebar-link{
+  display:flex;align-items:center;gap:.75rem;margin:2px .8rem;padding:.65rem .8rem;
+  border-radius:10px;color:#cbd0d8;text-decoration:none;font-weight:500;font-size:.95rem;
+  transition:background .15s,color .15s;
+}
+.sidebar-link i{font-size:1.1rem}
+.sidebar-link:hover{background:rgba(255,255,255,.07);color:#fff}
+.sidebar-link.activo{background:var(--rasmus-accent);color:#fff}
+.sidebar-pie{margin-top:auto;padding:1.2rem 1.4rem;font-size:.75rem;color:#6f7787}
+
+.layout-contenido{margin-left:260px;min-height:100vh;display:flex;flex-direction:column}
+.layout-contenido main{flex:1}
+
+/* Barra superior (solo móvil) */
+.topbar{
+  display:none;align-items:center;gap:.8rem;background:var(--rasmus-dark);
+  color:#fff;padding:.8rem 1rem;position:sticky;top:0;z-index:1030;font-weight:800;
+}
+.topbar button{background:none;border:0;color:#fff;font-size:1.6rem;line-height:1;padding:0}
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1035}
+.overlay.visible{display:block}
+
+@media (max-width:991.98px){
+  .sidebar{transform:translateX(-100%)}
+  .sidebar.abierto{transform:none}
+  .layout-contenido{margin-left:0}
+  .topbar{display:flex}
+}
+
+/* Portada */
+.hero{
+  background:linear-gradient(135deg,var(--rasmus-dark) 0%,#2b3140 100%);
+  color:#fff;padding:4rem 0 5rem;
+}
+.hero h1{font-weight:800;font-size:clamp(2rem,5vw,3.2rem)}
+.hero h1 span{color:var(--rasmus-accent)}
+.hero p{color:#cbd0d8;max-width:620px}
+.cards-temas{margin-top:-3rem}
+.tema-card{
+  display:block;height:100%;background:#fff;border-radius:16px;padding:1.5rem;
+  text-decoration:none;color:inherit;border:1px solid #e6e8ee;
+  transition:transform .15s,box-shadow .15s,border-color .15s;
+}
+.tema-card:hover{transform:translateY(-4px);box-shadow:0 12px 28px rgba(0,0,0,.1);border-color:var(--rasmus-accent);color:inherit}
+.tema-card .icono{
+  width:48px;height:48px;border-radius:12px;background:rgba(255,107,26,.12);
+  color:var(--rasmus-accent);display:grid;place-items:center;font-size:1.5rem;margin-bottom:1rem;
+}
+.tema-card h5{font-weight:700}
+.tema-card p{color:var(--rasmus-muted);font-size:.92rem;margin:0}
+.etiqueta-grupo{font-size:.72rem;text-transform:uppercase;letter-spacing:1px;color:var(--rasmus-accent);font-weight:700}
+
+/* Páginas de tema */
+.page-head{padding:2.5rem 0 1.5rem}
+.page-head h1{font-weight:800;font-size:1.9rem}
+.page-head h1 i{color:var(--rasmus-accent)}
+.page-head p{color:var(--rasmus-muted);margin:0}
+.card-panel{background:#fff;border:1px solid #e6e8ee;border-radius:16px;padding:1.5rem;margin-bottom:1.5rem}
+.card-panel h5{font-weight:700;margin-bottom:1rem}
+.card-panel h5 i{color:var(--rasmus-accent)}
+
+.btn-rasmus{background:var(--rasmus-accent);border-color:var(--rasmus-accent);color:#fff;font-weight:600}
+.btn-rasmus:hover{background:var(--rasmus-accent-dark);border-color:var(--rasmus-accent-dark);color:#fff}
+.nav-pills .nav-link{color:var(--rasmus-dark);font-weight:600}
+.nav-pills .nav-link.active{background:var(--rasmus-dark)}
+.form-control:focus,.form-select:focus{border-color:var(--rasmus-accent);box-shadow:0 0 0 .2rem rgba(255,107,26,.2)}
+
+/* Resultados */
+.stat{background:#fff;border:1px solid #e6e8ee;border-left:4px solid var(--rasmus-accent);border-radius:12px;padding:1rem}
+.stat-label{display:block;font-size:.78rem;color:var(--rasmus-muted);text-transform:uppercase;letter-spacing:.5px}
+.stat-value{display:block;font-size:1.6rem;font-weight:800}
+.stat-unit{font-size:.8rem;color:var(--rasmus-muted)}
+.pasos{padding-left:1.2rem;margin:0}
+.pasos li{padding:.35rem 0;border-bottom:1px dashed #e6e8ee;font-size:.92rem}
+.pasos li:last-child{border-bottom:0}
+.tabla-res th{background:var(--rasmus-dark);color:#fff;font-weight:600}
+.clase-A{background:#fde2e1}.clase-B{background:#fdf0d5}.clase-C{background:#e5f2d8}
+
+footer{background:var(--rasmus-dark);color:#8b93a1;padding:1.2rem 0;font-size:.85rem}
+
+/* Tablas de matrices y resultados */
+.tabla-matriz th,.tabla-matriz td{min-width:130px}
+.tabla-matriz thead th{background:transparent}
+tr.ganadora td{background:rgba(255,107,26,.14);font-weight:700}
+.metodo-titulo{display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-bottom:.2rem}
+.metodo-titulo h5{margin:0}
+.metodo-sub{color:var(--rasmus-muted);font-size:.85rem;margin-bottom:1rem}
+.badge-elegida{background:var(--rasmus-accent);color:#fff;font-weight:600;font-size:.78rem;padding:.35rem .65rem;border-radius:20px}
+
+/* Filas por clase ABC */
+tr.clase-A td{background:#fde2e1}
+tr.clase-B td{background:#fdf0d5}
+tr.clase-C td{background:#e5f2d8}
+.stat-A{border-left-color:#e24b4a}
+.stat-B{border-left-color:#ef9f27}
+.stat-C{border-left-color:#639922}
+.leyenda-abc{display:flex;gap:1.2rem;justify-content:center;font-size:.85rem;margin-top:.8rem;flex-wrap:wrap}
+.leyenda-abc span::before{content:"";display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:.4rem;vertical-align:-1px;background:var(--c)}
+
+/* Tablas de comparación por pares */
+.tabla-pares th{white-space:nowrap}
+.tabla-pares input{text-align:center;max-width:110px;margin:auto}
+.escala-saaty{font-size:.85rem}
+.escala-saaty td,.escala-saaty th{padding:.25rem .6rem}
+.lista-nombres .input-group{margin-bottom:.4rem}
+.texto-acento{color:var(--rasmus-accent)}

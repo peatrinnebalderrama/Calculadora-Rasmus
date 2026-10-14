@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block titulo %}EOQ{% endblock %}
+
+{% macro campo(id, etiqueta, valor='', ayuda='') %}
+<div class="mb-3">
+  <label class="form-label fw-semibold" for="{{ id }}">{{ etiqueta }}</label>
+  <input type="number" step="any" class="form-control" id="{{ id }}" value="{{ valor }}">
+  {% if ayuda %}<div class="form-text">{{ ayuda }}</div>{% endif %}
+</div>
+{% endmacro %}
+
+{% block contenido %}
+<div class="container">
+  <header class="page-head">
+    <h1><i class="bi {{ info.icono }}"></i> Cantidad económica de pedido (EOQ)</h1>
+    <p>{{ info.descripcion }}</p>
+  </header>
+
+  <ul class="nav nav-pills mb-4">
+    <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#tab-clasico">Sin faltantes</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-faltantes">Con faltantes</button></li>
+  </ul>
+
+  <div class="tab-content">
+    <!-- EOQ CLÁSICO -->
+    <div class="tab-pane fade show active" id="tab-clasico">
+      <div class="row g-4">
+        <div class="col-lg-4">
+          <form id="f-clasico" class="card-panel">
+            <h5><i class="bi bi-sliders"></i> Datos</h5>
+            {{ campo('c-D', 'Demanda anual (D)', 1000, 'unidades / año') }}
+            {{ campo('c-S', 'Costo de ordenar (S)', 10, 'por pedido') }}
+            {{ campo('c-H', 'Costo de mantener (H)', 2.5, 'por unidad / año. Si lo dejas vacío usa i·C') }}
+            {{ campo('c-i', 'Tasa de mantenimiento (i)', '', 'ej. 0.25 = 25 %') }}
+            {{ campo('c-C', 'Costo unitario (C)', '', 'opcional') }}
+            {{ campo('c-L', 'Tiempo de entrega (L)', 7, 'días') }}
+            {{ campo('c-dias', 'Días por año', 365) }}
+            <button class="btn btn-rasmus w-100">Calcular</button>
+          </form>
+        </div>
+        <div class="col-lg-8"><div id="r-clasico"></div></div>
+      </div>
+    </div>
+
+    <!-- EOQ CON FALTANTES -->
+    <div class="tab-pane fade" id="tab-faltantes">
+      <div class="row g-4">
+        <div class="col-lg-4">
+          <form id="f-faltantes" class="card-panel">
+            <h5><i class="bi bi-sliders"></i> Datos</h5>
+            {{ campo('f-D', 'Demanda anual (D)', 1000, 'unidades / año') }}
+            {{ campo('f-S', 'Costo de ordenar (S)', 10, 'por pedido') }}
+            {{ campo('f-H', 'Costo de mantener (H)', 2.5, 'por unidad / año. Si lo dejas vacío usa i·C') }}
+            {{ campo('f-i', 'Tasa de mantenimiento (i)', '', 'ej. 0.25 = 25 %') }}
+            {{ campo('f-C', 'Costo unitario (C)', '', 'opcional') }}
+            {{ campo('f-B', 'Costo de faltante (B)', 5, 'por unidad / año') }}
+            {{ campo('f-L', 'Tiempo de entrega (L)', 7, 'días') }}
+            {{ campo('f-dias', 'Días por año', 365) }}
+            <button class="btn btn-rasmus w-100">Calcular</button>
+          </form>
+        </div>
+        <div class="col-lg-8"><div id="r-faltantes"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ---- EOQ clásico ----
+document.getElementById("f-clasico").addEventListener("submit", async e => {
+  e.preventDefault();
+  const out = document.getElementById("r-clasico");
+  try {
+    const r = await enviar("/api/eoq", {
+      D: num("c-D"), S: num("c-S"), H: num("c-H"), i: num("c-i"),
+      C: num("c-C") || 0, L: num("c-L") || 0, dias: num("c-dias") || 365,
+    });
+    out.innerHTML =
+      tarjetas([
+        ["Cantidad óptima Q*", fmt(r.Q), "unidades"],
+        ["Pedidos por año N", fmt(r.N), "pedidos"],
+        ["Tiempo entre pedidos T", fmt(r.T), "días"],
+        ["Punto de reorden R", fmt(r.ROP), "unidades"],
+        ["Costo de ordenar", fmt(r.costo_ordenar), ""],
+        ["Costo total", fmt(r.costo_total), ""],
+      ]) +
+      `<div class="card-panel"><h5><i class="bi bi-graph-up"></i> Costos según el tamaño de pedido</h5>
+         <canvas id="g-clasico" height="120"></canvas></div>` +
+      pasosHTML(r.pasos);
+    const g = r.grafica;
+    dibujar("g-clasico", {
+      type: "line",
+      data: {
+        labels: g.q.map(q => q.toFixed(0)),
+        datasets: [
+          { label: "Costo de ordenar", data: g.ordenar, borderColor: "#185fa5", pointRadius: 0 },
+          { label: "Costo de mantener", data: g.mantener, borderColor: "#639922", pointRadius: 0 },
+          { label: "Costo total", data: g.total, borderColor: "#ff6b1a", borderWidth: 3, pointRadius: 0 },
+        ],
+      },
+      options: { scales: { x: { title: { display: true, text: "Q (unidades por pedido)" } },
+                           y: { title: { display: true, text: "Costo anual" } } } },
+    });
+  } catch (err) { out.innerHTML = errorHTML(err.message); }
+});
+
+// ---- EOQ con faltantes ----
+document.getElementById("f-faltantes").addEventListener("submit", async e => {
+  e.preventDefault();
+  const out = document.getElementById("r-faltantes");
+  try {
+    const r = await enviar("/api/eoq-faltantes", {
+      D: num("f-D"), S: num("f-S"), B: num("f-B"), H: num("f-H"), i: num("f-i"),
+      C: num("f-C") || 0, L: num("f-L") || 0, dias: num("f-dias") || 365,
+    });
+    out.innerHTML =
+      tarjetas([
+        ["Cantidad óptima Q*", fmt(r.Q), "unidades"],
+        ["Inventario máximo S*", fmt(r.S_max), "unidades"],
+        ["Faltante máximo", fmt(r.faltante_max), "unidades"],
+        ["Tiempo entre pedidos T", fmt(r.T), "días"],
+        ["Punto de reorden R", fmt(r.ROP), "unidades"],
+        ["Costo total", fmt(r.costo_total), ""],
+      ]) +
+      `<div class="card-panel"><h5><i class="bi bi-graph-up"></i> Nivel de inventario en el tiempo</h5>
+         <canvas id="g-faltantes" height="120"></canvas></div>` +
+      pasosHTML(r.pasos);
+
+    // Diente de sierra: 2 ciclos, el inventario baja de S* a -faltante
+    const pts = [];
+    for (let k = 0; k < 2; k++) {
+      pts.push({ x: k * r.T, y: r.S_max },
+               { x: k * r.T + r.t1, y: 0 },
+               { x: (k + 1) * r.T, y: -r.faltante_max });
+    }
+    dibujar("g-faltantes", {
+      type: "line",
+      data: { datasets: [{ label: "Inventario", data: pts, borderColor: "#ff6b1a",
+                           backgroundColor: "rgba(255,107,26,.15)", fill: "origin", pointRadius: 3 }] },
+      options: { scales: { x: { type: "linear", title: { display: true, text: "Días" } },
+                           y: { title: { display: true, text: "Unidades (negativo = faltante)" } } } },
+    });
+  } catch (err) { out.innerHTML = errorHTML(err.message); }
+});
+</script>
+{% endblock %}

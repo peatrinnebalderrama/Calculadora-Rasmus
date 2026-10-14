@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block titulo %}Pareto 80/20{% endblock %}
+
+{% block contenido %}
+<div class="container">
+  <header class="page-head">
+    <h1><i class="bi {{ info.icono }}"></i> Regla 80/20 (Pareto)</h1>
+    <p>Aproximadamente el 80 % de las ventas viene del 20 % de los productos. Aquí se identifican esos productos prioritarios.</p>
+  </header>
+
+  <form id="f-pareto" class="card-panel">
+    <h5><i class="bi bi-list-ul"></i> Productos</h5>
+
+    <div class="row g-3 mb-3">
+      <div class="col-md-5">
+        <label class="form-label fw-semibold" for="modo">Datos que tengo</label>
+        <select id="modo" class="form-select">
+          <option value="valor">Ventas de cada producto (un solo número)</option>
+          <option value="dc">Demanda y precio unitario</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label fw-semibold" for="limite">Límite acumulado (%)</label>
+        <input type="number" class="form-control" id="limite" value="80" min="1" max="99">
+      </div>
+    </div>
+
+    <div class="d-flex flex-wrap gap-2 mb-3">
+      <button type="button" class="btn btn-outline-dark btn-sm" id="add"><i class="bi bi-plus-lg"></i> Producto</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="del"><i class="bi bi-dash-lg"></i> Producto</button>
+    </div>
+
+    <div class="table-responsive mb-3"><table class="table align-middle" id="tabla-prod"></table></div>
+    <button class="btn btn-rasmus">Calcular</button>
+  </form>
+
+  <div id="resultados"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const NARANJA = "#ff6b1a", GRIS = "#b8bec9";
+
+let prods = [
+  { nombre: "Filtros de aceite", demanda: "", precio: "", valor: "171" },
+  { nombre: "Pastillas de freno", demanda: "", precio: "", valor: "105" },
+  { nombre: "Bujías", demanda: "", precio: "", valor: "13" },
+  { nombre: "Focos", demanda: "", precio: "", valor: "11" },
+  { nombre: "Escobillas", demanda: "", precio: "", valor: "9" },
+  { nombre: "Correas", demanda: "", precio: "", valor: "9" },
+  { nombre: "Fusibles", demanda: "", precio: "", valor: "8" },
+  { nombre: "Mangueras", demanda: "", precio: "", valor: "8" },
+  { nombre: "Empaques", demanda: "", precio: "", valor: "7" },
+  { nombre: "Tapones", demanda: "", precio: "", valor: "7" },
+];
+
+const modo = () => document.getElementById("modo").value;
+
+function leer() {
+  document.querySelectorAll("tr.fila-prod").forEach((tr, i) => {
+    const g = c => { const el = tr.querySelector("." + c); return el ? el.value : prods[i][c]; };
+    prods[i] = { nombre: g("nombre"), demanda: g("demanda"), precio: g("precio"), valor: g("valor") };
+  });
+}
+
+function pintar() {
+  const dc = modo() === "dc";
+  const cab = dc ? ["Producto", "Demanda", "Precio unitario", "Valor (calculado)"] : ["Producto", "Ventas"];
+  const celda = (cls, v, ro = false) =>
+    `<td><input type="number" step="any" min="0" class="form-control form-control-sm ${cls}" value="${esc(v)}" ${ro ? "readonly" : ""}></td>`;
+  document.getElementById("tabla-prod").innerHTML =
+    `<thead><tr>${cab.map(c => `<th>${c}</th>`).join("")}</tr></thead><tbody>` +
+    prods.map(p => `<tr class="fila-prod">
+      <td><input class="form-control form-control-sm nombre" value="${esc(p.nombre)}"></td>
+      ${dc ? celda("demanda", p.demanda) + celda("precio", p.precio) +
+             celda("valor", (p.demanda !== "" && p.precio !== "") ? p.demanda * p.precio : "", true)
+           : celda("valor", p.valor)}
+    </tr>`).join("") + "</tbody>";
+  if (dc) {
+    document.querySelectorAll("tr.fila-prod").forEach(tr => {
+      tr.addEventListener("input", () => {
+        const d = tr.querySelector(".demanda").value, c = tr.querySelector(".precio").value;
+        tr.querySelector(".valor").value = (d !== "" && c !== "") ? d * c : "";
+      });
+    });
+  }
+}
+
+document.getElementById("modo").onchange = () => { leer(); pintar(); };
+document.getElementById("add").onclick = () => { leer(); prods.push({ nombre: "Producto " + (prods.length + 1), demanda: "", precio: "", valor: "" }); pintar(); };
+document.getElementById("del").onclick = () => { if (prods.length > 2) { leer(); prods.pop(); pintar(); } };
+
+document.getElementById("f-pareto").addEventListener("submit", async e => {
+  e.preventDefault();
+  const out = document.getElementById("resultados");
+  try {
+    leer();
+    const dc = modo() === "dc";
+    const limite = num("limite");
+    if (!(limite > 0 && limite < 100)) throw new Error("El límite debe estar entre 0 y 100.");
+    const productos = prods.map((p, i) => {
+      if (!p.nombre.trim()) throw new Error(`El producto ${i + 1} no tiene nombre.`);
+      if (dc) {
+        if (p.demanda === "" || p.precio === "") throw new Error(`Completa demanda y precio de «${p.nombre}».`);
+        return { nombre: p.nombre, demanda: Number(p.demanda), precio: Number(p.precio) };
+      }
+      if (p.valor === "") throw new Error(`Completa las ventas de «${p.nombre}».`);
+      return { nombre: p.nombre, valor: Number(p.valor) };
+    });
+    const r = await enviar("/api/pareto", { productos, limite });
+
+    const P = r.prioritarios, R = r.resto;
+    const tarjetasHTML = `<div class="row g-3 mb-4">
+      <div class="col-md-6"><div class="stat">
+        <span class="stat-label">Productos prioritarios</span>
+        <span class="stat-value">${P.num_productos} de ${r.tabla.length} (${fmt(P.pct_productos, 0)} %)</span>
+        <span class="stat-unit">generan el ${fmt(P.pct_valor, 1)} % de las ventas</span></div></div>
+      <div class="col-md-6"><div class="stat" style="border-left-color:${GRIS}">
+        <span class="stat-label">Resto de productos</span>
+        <span class="stat-value">${R.num_productos} de ${r.tabla.length} (${fmt(R.pct_productos, 0)} %)</span>
+        <span class="stat-unit">generan el ${fmt(R.pct_valor, 1)} % restante</span></div></div></div>`;
+
+    const filas = r.tabla.map(t => `<tr class="${t.prioritario ? "ganadora" : ""}">
+      <td>${t.posicion}</td><td>${esc(t.nombre)}</td><td>${fmt(t.valor)}</td>
+      <td>${fmt(t.pct)} %</td><td>${fmt(t.pct_acumulado)} %</td>
+      <td>${t.prioritario ? '<i class="bi bi-check-circle-fill" style="color:var(--rasmus-accent)"></i> Sí' : "No"}</td></tr>`).join("");
+
+    out.innerHTML = tarjetasHTML +
+      `<div class="card-panel"><h5><i class="bi bi-bar-chart-line"></i> Diagrama de Pareto</h5>
+         <canvas id="g-pareto" height="110"></canvas>
+         <div class="leyenda-abc">
+           <span style="--c:${NARANJA}">Prioritarios (acumulado ≤ ${r.limite} %)</span>
+           <span style="--c:${GRIS}">Resto</span></div></div>
+       <div class="card-panel"><h5><i class="bi bi-table"></i> Tabla</h5>
+         <div class="table-responsive"><table class="table tabla-res align-middle mb-0">
+           <thead><tr><th>#</th><th>Producto</th><th>Valor</th><th>% individual</th><th>% acumulado</th><th>Prioritario</th></tr></thead>
+           <tbody>${filas}</tbody></table></div></div>
+       <div class="card-panel"><h5><i class="bi bi-list-check"></i> Procedimiento</h5>
+         <ol class="pasos">${r.pasos.map(p => `<li>${esc(p)}</li>`).join("")}</ol></div>`;
+
+    const g = r.grafica;
+    dibujar("g-pareto", {
+      data: {
+        labels: g.etiquetas,
+        datasets: [
+          { type: "bar", label: "% individual", data: g.pct, order: 2,
+            backgroundColor: g.prioritario.map(p => p ? NARANJA : GRIS) },
+          { type: "line", label: "% acumulado", data: g.acumulado, order: 1,
+            borderColor: "#1b1f27", backgroundColor: "#1b1f27", tension: 0.15, pointRadius: 4 },
+          { type: "line", label: `Límite ${r.limite} %`, data: g.etiquetas.map(() => r.limite), order: 0,
+            borderColor: "#888", borderDash: [6, 6], pointRadius: 0, borderWidth: 1.5 },
+        ],
+      },
+      options: {
+        scales: { y: { min: 0, max: 100, ticks: { callback: v => v + " %" },
+                       title: { display: true, text: "Porcentaje" } } },
+      },
+    });
+  } catch (err) { out.innerHTML = errorHTML(err.message); }
+});
+
+pintar();
+</script>
+{% endblock %}

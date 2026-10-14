@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block titulo %}Información escasa{% endblock %}
+
+{% block contenido %}
+<div class="container">
+  <header class="page-head">
+    <h1><i class="bi {{ info.icono }}"></i> Decisión con información escasa</h1>
+    <p>Sin probabilidades: se aplican los criterios de Laplace, Wald, Hurwicz y Savage a la misma matriz.</p>
+  </header>
+
+  <form id="f-inc" class="card-panel">
+    <h5><i class="bi bi-grid-3x3"></i> Matriz de pagos</h5>
+    <p class="text-muted small mb-3">Filas = alternativas, columnas = estados de la naturaleza. Puedes cambiar los nombres.</p>
+
+    <div class="d-flex flex-wrap gap-2 mb-3">
+      <button type="button" class="btn btn-outline-dark btn-sm" id="add-alt"><i class="bi bi-plus-lg"></i> Alternativa</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="del-alt"><i class="bi bi-dash-lg"></i> Alternativa</button>
+      <button type="button" class="btn btn-outline-dark btn-sm" id="add-est"><i class="bi bi-plus-lg"></i> Estado</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="del-est"><i class="bi bi-dash-lg"></i> Estado</button>
+    </div>
+
+    <div class="table-responsive mb-3"><table class="table tabla-matriz align-middle" id="matriz"></table></div>
+
+    <div class="row g-3 align-items-end">
+      <div class="col-md-4">
+        <label class="form-label fw-semibold" for="tipo">Los pagos son</label>
+        <select id="tipo" class="form-select">
+          <option value="max">Ganancias (maximizar)</option>
+          <option value="min">Costos (minimizar)</option>
+        </select>
+      </div>
+      <div class="col-md-5">
+        <label class="form-label fw-semibold" for="alfa">Coeficiente de optimismo α (Hurwicz): <span id="alfa-val">0.5</span></label>
+        <input type="range" class="form-range" id="alfa" min="0" max="1" step="0.05" value="0.5">
+        <div class="form-text">α pesa el mejor resultado de cada alternativa; (1-α) pesa el peor.</div>
+      </div>
+      <div class="col-md-3"><button class="btn btn-rasmus w-100">Calcular</button></div>
+    </div>
+  </form>
+
+  <div id="resultados"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let alts = ["Lote pequeño", "Lote mediano", "Lote grande"];
+let ests = ["Demanda baja", "Demanda media", "Demanda alta"];
+let datos = [["100", "100", "100"], ["60", "200", "200"], ["20", "160", "300"]];
+
+// Copia lo que hay en pantalla a las variables (antes de agregar/quitar filas)
+function leer() {
+  alts = [...document.querySelectorAll(".n-alt")].map(i => i.value);
+  ests = [...document.querySelectorAll(".n-est")].map(i => i.value);
+  datos = [...document.querySelectorAll("tr.fila-datos")]
+    .map(tr => [...tr.querySelectorAll(".celda")].map(i => i.value));
+}
+
+function pintar() {
+  document.getElementById("matriz").innerHTML =
+    `<thead><tr><th></th>${ests.map(e =>
+      `<th><input class="form-control form-control-sm n-est" value="${esc(e)}"></th>`).join("")}</tr></thead>
+     <tbody>${alts.map((a, i) => `<tr class="fila-datos">
+       <td><input class="form-control form-control-sm n-alt fw-semibold" value="${esc(a)}"></td>
+       ${ests.map((_, j) => `<td><input type="number" step="any" class="form-control form-control-sm celda"
+          value="${esc(datos[i][j] ?? "")}"></td>`).join("")}</tr>`).join("")}</tbody>`;
+}
+
+document.getElementById("add-alt").onclick = () => { leer(); alts.push("Alternativa " + (alts.length + 1)); datos.push(ests.map(() => "")); pintar(); };
+document.getElementById("del-alt").onclick = () => { if (alts.length > 2) { leer(); alts.pop(); datos.pop(); pintar(); } };
+document.getElementById("add-est").onclick = () => { leer(); ests.push("Estado " + (ests.length + 1)); datos.forEach(f => f.push("")); pintar(); };
+document.getElementById("del-est").onclick = () => { if (ests.length > 2) { leer(); ests.pop(); datos.forEach(f => f.pop()); pintar(); } };
+document.getElementById("alfa").oninput = e => document.getElementById("alfa-val").textContent = e.target.value;
+
+function tarjetaMetodo(titulo, sub, cuerpo, elegida, pasos) {
+  return `<div class="col-lg-6"><div class="card-panel h-100">
+    <div class="metodo-titulo"><h5>${titulo}</h5><span class="badge-elegida">${esc(elegida)}</span></div>
+    <div class="metodo-sub">${sub}</div>
+    ${cuerpo}
+    <ol class="pasos mt-3">${pasos.map(p => `<li>${esc(p)}</li>`).join("")}</ol>
+  </div></div>`;
+}
+
+document.getElementById("f-inc").addEventListener("submit", async e => {
+  e.preventDefault();
+  const out = document.getElementById("resultados");
+  try {
+    leer();
+    const m = datos.map(f => f.map(x => (x === "" ? NaN : Number(x))));
+    if (m.flat().some(Number.isNaN)) throw new Error("Completa todas las celdas de la matriz con números.");
+    const mx = document.getElementById("tipo").value === "max";
+    const r = await enviar("/api/incertidumbre", {
+      alternativas: alts, matriz: m, maximizar: mx, alfa: parseFloat(document.getElementById("alfa").value),
+    });
+
+    const valores = (k, rotulo) => tablaHTML(["Alternativa", rotulo], alts.map((a, i) => [esc(a), fmt(r[k].valores[i], 2)]), r[k].indice);
+
+    // Savage: tabla de arrepentimientos con columna de máximo
+    const sv = r.savage;
+    const tablaSavage = tablaHTML(["Alternativa", ...ests, "Máx."],
+      alts.map((a, i) => [esc(a), ...sv.tabla_arrepentimiento[i].map(x => fmt(x, 2)), fmt(sv.maximos[i], 2)]), sv.indice);
+
+    const resumen = tablaHTML(["Criterio", "Alternativa elegida"], [
+      ["Laplace", esc(r.laplace.mejor)], ["Wald", esc(r.wald.mejor)],
+      [`Hurwicz (α = ${r.hurwicz.alfa})`, esc(r.hurwicz.mejor)], ["Savage", esc(r.savage.mejor)],
+    ]);
+    const todas = new Set([r.laplace.mejor, r.wald.mejor, r.hurwicz.mejor, r.savage.mejor]);
+    const nota = todas.size === 1
+      ? `Los cuatro criterios coinciden en <strong>${esc(r.laplace.mejor)}</strong>.`
+      : "Los criterios no coinciden: cada uno refleja una actitud distinta ante el riesgo.";
+
+    out.innerHTML =
+      `<div class="card-panel"><h5><i class="bi bi-flag"></i> Resumen</h5>${resumen}<p class="mt-3 mb-0">${nota}</p></div>
+       <div class="row g-4">` +
+      tarjetaMetodo("Laplace", "Todos los estados son igual de probables (promedio)", valores("laplace", mx ? "Promedio" : "Promedio"), r.laplace.mejor, r.laplace.pasos) +
+      tarjetaMetodo(mx ? "Wald (maximin)" : "Wald (minimax)", "Pesimista: se prepara para lo peor", valores("wald", mx ? "Mínimo" : "Máximo"), r.wald.mejor, r.wald.pasos) +
+      tarjetaMetodo("Hurwicz", "Mezcla de optimismo y pesimismo", valores("hurwicz", "Valor ponderado"), r.hurwicz.mejor, r.hurwicz.pasos) +
+      tarjetaMetodo("Savage (arrepentimiento)", "Minimiza el mayor arrepentimiento", tablaSavage, r.savage.mejor, r.savage.pasos) +
+      `</div>`;
+  } catch (err) { out.innerHTML = errorHTML(err.message); }
+});
+
+pintar();
+</script>
+{% endblock %}

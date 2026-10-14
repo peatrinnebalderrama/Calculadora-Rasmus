@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block titulo %}Inicio{% endblock %}
+{% block contenido %}
+<section class="hero">
+  <div class="container">
+    <h1>Calculadora <span>Rasmus</span></h1>
+    <p class="fs-5">Resuelve paso a paso los problemas de una empresa.</p>
+  </div>
+</section>
+
+<section class="container cards-temas mb-5">
+  <div class="row g-4">
+    {% for clave, t in TEMAS.items() %}
+    <div class="col-md-6 col-lg-4">
+      <a class="tema-card" href="{{ url_for('tema', nombre=clave) }}">
+        <div class="icono"><i class="bi {{ t.icono }}"></i></div>
+        <span class="etiqueta-grupo">{{ t.grupo }}</span>
+        <h5>{{ t.titulo }}</h5>
+        <p>{{ t.descripcion }}</p>
+      </a>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

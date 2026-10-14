@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+{% block titulo %}Decisión bajo certeza{% endblock %}
+
+{% block contenido %}
+<div class="container">
+  <header class="page-head">
+    <h1><i class="bi {{ info.icono }}"></i> Decisión bajo certeza</h1>
+    <p>Comparación por pares: se obtienen los pesos de los criterios, la prioridad de cada alternativa por criterio, y con eso la decisión final.</p>
+  </header>
+
+  <!-- 1. Nombres -->
+  <div class="row g-4">
+    <div class="col-md-6">
+      <div class="card-panel h-100">
+        <h5><i class="bi bi-sliders2"></i> Criterios</h5>
+        <div class="lista-nombres" id="lista-crit"></div>
+        <button type="button" class="btn btn-outline-dark btn-sm" id="add-crit"><i class="bi bi-plus-lg"></i> Criterio</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="del-crit"><i class="bi bi-dash-lg"></i> Criterio</button>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card-panel h-100">
+        <h5><i class="bi bi-box-seam"></i> Alternativas</h5>
+        <div class="lista-nombres" id="lista-alt"></div>
+        <button type="button" class="btn btn-outline-dark btn-sm" id="add-alt"><i class="bi bi-plus-lg"></i> Alternativa</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="del-alt"><i class="bi bi-dash-lg"></i> Alternativa</button>
+      </div>
+    </div>
+  </div>
+
+  <form id="f-certeza">
+    <!-- 2. Tabla general -->
+    <div class="card-panel">
+      <h5><i class="bi bi-table"></i> Tabla general: comparación de criterios</h5>
+      <p class="text-muted small">Escribe cuánto más importante es el criterio de la <strong>fila</strong> frente al de la <strong>columna</strong>. Solo llenas la parte de arriba; la de abajo se calcula sola.</p>
+      <div id="tablas-crit"></div>
+      <details class="mt-2">
+        <summary class="small fw-semibold" style="cursor:pointer">Ver escala de comparación</summary>
+        <table class="table escala-saaty mt-2 mb-0 w-auto">
+          <tr><th>1</th><td>Igual de importante</td></tr>
+          <tr><th>3</th><td>Moderadamente más importante</td></tr>
+          <tr><th>5</th><td>Fuertemente más importante</td></tr>
+          <tr><th>7</th><td>Muy fuertemente más importante</td></tr>
+          <tr><th>9</th><td>Extremadamente más importante</td></tr>
+          <tr><th>2, 4, 6, 8</th><td>Valores intermedios</td></tr>
+          <tr><th>1/3, 1/5...</th><td>Si la fila es <em>menos</em> importante que la columna</td></tr>
+        </table>
+      </details>
+    </div>
+
+    <!-- 3. Una tabla por criterio -->
+    <div class="card-panel">
+      <h5><i class="bi bi-tables"></i> Una tabla por criterio: comparación de alternativas</h5>
+      <p class="text-muted small">Para cada criterio, compara las alternativas entre sí (fila frente a columna).</p>
+      <div id="tablas-alt"></div>
+    </div>
+
+    <button class="btn btn-rasmus btn-lg mb-4">Calcular decisión</button>
+  </form>
+
+  <div id="resultados"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let crit = ["Precio", "Calidad", "Entrega"];
+let alt = ["Proveedor A", "Proveedor B", "Proveedor C"];
+
+// Valores escritos en las tablas. Clave: tabla:fila:columna ("crit" o "c0", "c1"...)
+const vals = {
+  "crit:0:1": "3", "crit:0:2": "5", "crit:1:2": "2",
+  "c0:0:1": "2", "c0:0:2": "4", "c0:1:2": "3",
+  "c1:0:1": "1/3", "c1:0:2": "2", "c1:1:2": "5",
+  "c2:0:1": "2", "c2:0:2": "2", "c2:1:2": "1",
+};
+
+// ---------- utilidades ----------
+function parsear(s) {
+  s = String(s).trim().replace(",", ".");
+  if (s === "") return NaN;
+  if (s.includes("/")) { const [a, b] = s.split("/").map(Number); return a / b; }
+  return Number(s);
+}
+function recip(s) { const v = parsear(s); return (isFinite(v) && v > 0) ? fmt(1 / v, 3) : "—"; }
+
+// ---------- listas de nombres ----------
+function pintarListas() {
+  const lista = (id, arr, cls) => document.getElementById(id).innerHTML =
+    arr.map(n => `<div class="input-group input-group-sm"><input class="form-control ${cls}" value="${esc(n)}"></div>`).join("");
+  lista("lista-crit", crit, "n-crit");
+  lista("lista-alt", alt, "n-alt");
+}
+function leerNombres() {
+  crit = [...document.querySelectorAll(".n-crit")].map(i => i.value);
+  alt = [...document.querySelectorAll(".n-alt")].map(i => i.value);
+}
+document.addEventListener("change", e => {
+  if (e.target.matches(".n-crit, .n-alt")) { leerNombres(); pintarTablas(); }
+});
+document.getElementById("add-crit").onclick = () => { if (crit.length < 8) { leerNombres(); crit.push("Criterio " + (crit.length + 1)); pintarListas(); pintarTablas(); } };
+document.getElementById("del-crit").onclick = () => { if (crit.length > 2) { leerNombres(); crit.pop(); pintarListas(); pintarTablas(); } };
+document.getElementById("add-alt").onclick = () => { if (alt.length < 8) { leerNombres(); alt.push("Alternativa " + (alt.length + 1)); pintarListas(); pintarTablas(); } };
+document.getElementById("del-alt").onclick = () => { if (alt.length > 2) { leerNombres(); alt.pop(); pintarListas(); pintarTablas(); } };
+
+// ---------- tablas de comparación por pares ----------
+function tablaPares(t, nombres) {
+  const n = nombres.length;
+  let h = `<div class="table-responsive"><table class="table tabla-matriz tabla-pares align-middle">
+    <thead><tr><th></th>${nombres.map(x => `<th>${esc(x)}</th>`).join("")}</tr></thead><tbody>`;
+  for (let i = 0; i < n; i++) {
+    h += `<tr><th class="text-start">${esc(nombres[i])}</th>`;
+    for (let j = 0; j < n; j++) {
+      if (i === j) h += `<td class="text-center fw-bold">1</td>`;
+      else if (i < j) {
+        const key = `${t}:${i}:${j}`;
+        h += `<td><input class="form-control form-control-sm par" data-key="${key}" value="${esc(vals[key] ?? "1")}"></td>`;
+      } else {
+        const key = `${t}:${j}:${i}`;
+        h += `<td class="text-center text-muted"><span class="recip" data-key="${key}">${recip(vals[key] ?? "1")}</span></td>`;
+      }
+    }
+    h += "</tr>";
+  }
+  return h + "</tbody></table></div>";
+}
+
+function pintarTablas() {
+  document.getElementById("tablas-crit").innerHTML = tablaPares("crit", crit);
+  document.getElementById("tablas-alt").innerHTML = crit.map((c, k) =>
+    `<div class="mb-4"><h6 class="fw-bold">Alternativas según: <span class="texto-acento">${esc(c)}</span></h6>${tablaPares("c" + k, alt)}</div>`).join("");
+}
+
+// Al escribir en una celda: guardar y actualizar el recíproco
+document.addEventListener("input", e => {
+  if (!e.target.matches(".par")) return;
+  const key = e.target.dataset.key;
+  vals[key] = e.target.value;
+  document.querySelectorAll(`.recip[data-key="${key}"]`).forEach(s => s.textContent = recip(e.target.value));
+});
+
+// Arma el triángulo superior (null debajo de la diagonal) para enviarlo al servidor
+function triangulo(t, n, etiqueta) {
+  const m = [];
+  for (let i = 0; i < n; i++) {
+    m.push([]);
+    for (let j = 0; j < n; j++) {
+      if (i === j) m[i].push(1);
+      else if (i > j) m[i].push(null);
+      else {
+        const v = parsear(vals[`${t}:${i}:${j}`] ?? "1");
+        if (!(isFinite(v) && v > 0)) throw new Error(`Revisa la tabla «${etiqueta}»: hay un valor vacío o inválido (usa números positivos, como 3 o 1/3).`);
+        m[i].push(v);
+      }
+    }
+  }
+  return m;
+}
+
+// ---------- mostrar resultados ----------
+function bloqueAHP(nombres, p) {
+  const matriz = tablaHTML(["", ...nombres], [
+    ...nombres.map((nm, i) => [`<strong>${esc(nm)}</strong>`, ...p.matriz[i].map(x => fmt(x, 3))]),
+    ["<strong>Suma</strong>", ...p.sumas_columna.map(x => `<strong>${fmt(x, 3)}</strong>`)],
+  ]);
+  const norm = tablaHTML(["", ...nombres, "Prioridad (promedio)"],
+    nombres.map((nm, i) => [esc(nm), ...p.normalizada[i].map(x => fmt(x, 3)), `<strong>${fmt(p.vector[i], 4)}</strong>`]));
+  const cons = p.cr === null
+    ? `<span class="text-muted small">Con 2 elementos la comparación siempre es consistente.</span>`
+    : `<span class="small">λmax = ${fmt(p.lambda_max, 4)} · CI = ${fmt(p.ci, 4)} · CR = ${fmt(p.cr, 4)}</span>
+       <span class="badge ${p.consistente ? "text-bg-success" : "text-bg-danger"} ms-2">${p.consistente ? "Consistente (CR ≤ 0.10)" : "Inconsistente (CR > 0.10): revisa tus comparaciones"}</span>`;
+  return `<div class="fw-semibold small mb-1">Matriz de comparación</div>${matriz}
+          <div class="fw-semibold small mt-3 mb-1">Matriz normalizada (cada valor / suma de su columna)</div>${norm}
+          <div class="mt-3">${cons}</div>`;
+}
+
+document.getElementById("f-certeza").addEventListener("submit", async e => {
+  e.preventDefault();
+  const out = document.getElementById("resultados");
+  try {
+    leerNombres();
+    for (const [lista, tipo] of [[crit, "criterios"], [alt, "alternativas"]]) {
+      if (lista.some(n => !n.trim())) throw new Error(`Hay ${tipo} sin nombre.`);
+      if (new Set(lista.map(n => n.trim())).size !== lista.length) throw new Error(`Los nombres de las ${tipo} deben ser distintos.`);
+    }
+    const criterios = crit.map(c => c.trim()), alternativas = alt.map(a => a.trim());
+    const matrices = {};
+    criterios.forEach((c, k) => matrices[c] = triangulo("c" + k, alt.length, `Alternativas según ${c}`));
+
+    const r = await enviar("/api/certeza", {
+      criterios, alternativas,
+      matriz_criterios: triangulo("crit", crit.length, "Comparación de criterios"),
+      matrices_por_criterio: matrices,
+    });
+
+    // Paso 1
+    const pesos = r.paso1_general.vector;
+    const paso1 = `<div class="card-panel"><h5><i class="bi bi-1-circle"></i> Paso 1: pesos de los criterios</h5>
+      ${bloqueAHP(criterios, r.paso1_general)}</div>`;
+
+    // Paso 2 (acordeón)
+    const items = criterios.map((c, k) => `<div class="accordion-item">
+      <h2 class="accordion-header"><button class="accordion-button ${k ? "collapsed" : ""}" type="button"
+        data-bs-toggle="collapse" data-bs-target="#acc${k}">${esc(c)} &nbsp;<span class="text-muted small">(peso ${fmt(pesos[k], 3)})</span></button></h2>
+      <div id="acc${k}" class="accordion-collapse collapse ${k ? "" : "show"}" data-bs-parent="#acordeon">
+        <div class="accordion-body">${bloqueAHP(alternativas, r.paso2_por_criterio[c])}</div></div></div>`).join("");
+    const paso2 = `<div class="card-panel"><h5><i class="bi bi-2-circle"></i> Paso 2: prioridad de las alternativas en cada criterio</h5>
+      <div class="accordion" id="acordeon">${items}</div></div>`;
+
+    // Paso 3
+    const encab = ["Alternativa", ...criterios.map((c, k) => `${c} (peso ${fmt(pesos[k], 3)})`), "Total"];
+    const filas = r.paso3_decision.map(f => [
+      `<strong>${esc(f.alternativa)}</strong>`,
+      ...criterios.map(c => { const d = f.detalle[c];
+        return `${fmt(d.prioridad, 3)} × ${fmt(d.peso, 3)} = <strong>${fmt(d.aporte, 3)}</strong>`; }),
+      `<strong>${fmt(f.total, 4)}</strong>`,
+    ]);
+    const idxGan = alternativas.indexOf(r.ganadora);
+    const paso3 = `<div class="card-panel"><h5><i class="bi bi-3-circle"></i> Paso 3: tabla de decisión</h5>
+      <p class="text-muted small">Cada celda: prioridad de la alternativa × peso del criterio = aporte. El total es la suma de los aportes.</p>
+      ${tablaHTML(encab, filas, idxGan)}</div>`;
+
+    const ranking = `<div class="card-panel"><h5><i class="bi bi-trophy"></i> Resultado</h5>
+      <p class="fs-5">La mejor alternativa es <strong class="texto-acento">${esc(r.ganadora)}</strong>.</p>
+      ${tablaHTML(["Puesto", "Alternativa", "Puntaje"], r.ranking.map(([n, t], i) => [i + 1, esc(n), fmt(t, 4)]), 0)}
+      <canvas id="g-cert" height="90" class="mt-3"></canvas></div>`;
+
+    out.innerHTML = ranking + paso1 + paso2 + paso3;
+
+    dibujar("g-cert", {
+      type: "bar",
+      data: { labels: r.ranking.map(x => x[0]),
+              datasets: [{ label: "Puntaje", data: r.ranking.map(x => x[1]),
+                           backgroundColor: r.ranking.map((_, i) => i === 0 ? "#ff6b1a" : "#b8bec9") }] },
+      options: { indexAxis: "y", plugins: { legend: { display: false } } },
+    });
+  } catch (err) { out.innerHTML = errorHTML(err.message); }
+});
+
+pintarListas();
+pintarTablas();
+</script>
+{% endblock %}
